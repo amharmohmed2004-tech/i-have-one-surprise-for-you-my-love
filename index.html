@@ -9,31 +9,35 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body, html { width: 100%; height: 100%; overflow: hidden; background-color: #ffe6e6; font-family: 'Arial', sans-serif; display: flex; justify-content: center; align-items: center; }
         
-        /* Screen 1: Welcome Animation */
+        /* Screen 1: Welcome Screen */
         #welcome-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #fff0f5; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 10; transition: opacity 1s ease; }
         .heart { font-size: 80px; animation: beat 0.6s infinite alternate; cursor: pointer; user-select: none; -webkit-user-select: none; }
         @keyframes beat { to { transform: scale(1.3); } }
         .welcome-text { margin-top: 20px; font-size: 22px; color: #ff4d6d; font-weight: bold; text-align: center; padding: 0 20px; }
 
-        /* Screen 2: Scratch Card Screen */
-        #scratch-screen { display: none; opacity: 0; transition: opacity 1s ease; flex-direction: column; align-items: center; width: 100%; height: 100%; justify-content: center; }
+        /* Screen 2: Main Scratch Container */
+        #scratch-screen { display: none; opacity: 0; transition: opacity 1s ease; flex-direction: column; align-items: center; width: 100%; height: 100%; justify-content: center; position: relative; }
         .container { position: relative; width: 320px; height: 400px; box-shadow: 0 0 20px rgba(0,0,0,0.2); border-radius: 15px; overflow: hidden; background: #fff; }
         
-        /* The Secret Photo (Underneath) */
-        #secret-photo { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; z-index: 1; }
+        /* Secret Photo Underneath */
+        #secret-photo { width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0; z-index: 1; transition: transform 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        .photo-rise { transform: scale(1.05) translateY(-5px); filter: drop-shadow(0 10px 15px rgba(255, 77, 109, 0.4)); }
         
-        /* The Blank Canvas (On Top) */
+        /* Canvas Layer */
         #scratch-canvas { position: absolute; top: 0; left: 0; z-index: 2; cursor: pointer; }
         
-        .instruction { margin-top: 20px; font-size: 18px; color: #ff4d6d; font-weight: bold; background: white; padding: 10px 20px; border-radius: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); animation: bounce 2s infinite; }
+        .instruction { margin-top: 20px; font-size: 18px; color: #ff4d6d; font-weight: bold; background: white; padding: 10px 20px; border-radius: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); animation: bounce 2s infinite; text-align: center; max-width: 90%; }
         @keyframes bounce { 0%, 20%, 50%, 80%, 100% {transform: translateY(0);} 40% {transform: translateY(-10px);} 60% {transform: translateY(-5px);} }
+
+        /* Fullscreen Video Layer - Invisible at start, brings to front on double tap */
+        #video-layer { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: -5; opacity: 0; transition: opacity 0.5s ease; display: flex; justify-content: center; align-items: center; }
+        #surprise-video { width: 100%; height: 100%; object-fit: contain; }
+        
+        /* Active video screen state */
+        .video-active { z-index: 20 !important; opacity: 1 !important; }
     </style>
 </head>
 <body>
-
-    <audio id="bg-music" loop preload="auto">
-        <source src="audio.mp3" type="audio/mpeg">
-    </audio>
 
     <div id="welcome-screen" onclick="startSurprise()">
         <div class="heart">❤️</div>
@@ -42,52 +46,48 @@
 
     <div id="scratch-screen">
         <div class="container">
-            <img id="secret-photo" src="photo.jpg" alt="Surprise Photo">
+            <img id="secret-photo" src="photo.jpg" alt="Surprise Photo" ondblclick="triggerVideoSurprise()" onclick="handleMobileDoubleTap()">
             <canvas id="scratch-canvas" width="320" height="400"></canvas>
         </div>
-        <div class="instruction">👇 Erase Here with Your Finger! 👇</div>
+        <div id="status-text" class="instruction">👇 Erase Here with Your Finger! 👇</div>
+    </div>
+
+    <div id="video-layer">
+        <video id="surprise-video" loop preload="auto">
+            <source src="video.mp4" type="video/mp4">
+        </video>
     </div>
 
     <script>
-        const audio = document.getElementById('bg-music');
+        const video = document.getElementById('surprise-video');
+        const videoLayer = document.getElementById('video-layer');
+        const photo = document.getElementById('secret-photo');
+        const statusText = document.getElementById('status-text');
         
-        // Force preload audio file
+        let scratchCleared = false;
+        let lastTap = 0; // Mobile double tap custom support
+
         window.addEventListener('DOMContentLoaded', () => {
-            audio.load();
+            video.load();
         });
 
         function startSurprise() {
-            // Unmute and force play immediately on click
-            audio.muted = false;
-            var playPromise = audio.play();
+            // Invisible background video starts playing with audio here
+            video.muted = false;
+            video.play().catch(e => console.log("Video playback blocked:", e));
             
-            if (playPromise !== undefined) {
-                playPromise.then(_ => {
-                    console.log("Local MP3 audio playing perfectly!");
-                }).catch(error => {
-                    console.log("Playback blocked, trying backup trigger...", error);
-                    // Mobile user touch fallback
-                    document.body.addEventListener('touchstart', function() {
-                        audio.play();
-                    }, {once: true});
-                });
-            }
-            
-            // Party Pop Effect (Confetti)
+            // Confetti
             var duration = 3 * 1000;
             var end = Date.now() + duration;
-
             (function frame() {
                 confetti({ particleCount: 5, angle: 60, spread: 55, origin: { x: 0 } });
                 confetti({ particleCount: 5, angle: 120, spread: 55, origin: { x: 1 } });
                 if (Date.now() < end) { requestAnimationFrame(frame); }
             }());
 
-            // Transition to Scratch Card
             setTimeout(() => {
                 const welcome = document.getElementById('welcome-screen');
                 const scratchScreen = document.getElementById('scratch-screen');
-                
                 welcome.style.opacity = '0';
                 setTimeout(() => {
                     welcome.style.display = 'none';
@@ -102,10 +102,10 @@
             const canvas = document.getElementById('scratch-canvas');
             const ctx = canvas.getContext('2d');
             let isDrawing = false;
+            let totalPixels = canvas.width * canvas.height;
 
             ctx.fillStyle = '#ffb3c1'; 
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-
             ctx.font = 'bold 22px Arial';
             ctx.fillStyle = '#ffffff';
             ctx.textAlign = 'center';
@@ -114,8 +114,36 @@
             function scratch(x, y) {
                 ctx.globalCompositeOperation = 'destination-out';
                 ctx.beginPath();
-                ctx.arc(x, y, 28, 0, Math.PI * 2);
+                ctx.arc(x, y, 30, 0, Math.PI * 2);
                 ctx.fill();
+                checkClearance();
+            }
+
+            function checkClearance() {
+                if (scratchCleared) return;
+                
+                let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                let clearedCount = 0;
+                
+                for (let i = 3; i < imageData.data.length; i += 20) {
+                    if (imageData.data[i] === 0) { clearedCount += 5; }
+                }
+
+                if ((clearedCount / totalPixels) > 0.45) {
+                    scratchCleared = true;
+                    canvas.style.transition = "opacity 0.8s ease";
+                    canvas.style.opacity = "0";
+                    setTimeout(() => { canvas.style.display = "none"; }, 800);
+                    
+                    photo.classList.add('photo-rise');
+                    statusText.innerHTML = "Wow! Looking Beautiful My Queen! 😍👑";
+                    
+                    // 7 Seconds Delay message change
+                    setTimeout(() => {
+                        statusText.style.color = "#ff1493";
+                        statusText.innerHTML = "💖 Double Tap the Photo for a Magic Surprise! 💖";
+                    }, 7000);
+                }
             }
 
             canvas.addEventListener('mousedown', (e) => { isDrawing = true; scratch(e.offsetX, e.offsetY); });
@@ -136,6 +164,26 @@
                 scratch(touch.clientX - rect.left, touch.clientY - rect.top);
             });
             window.addEventListener('touchend', () => isDrawing = false);
+        }
+
+        // Mobile touch double tap detection
+        function handleMobileDoubleTap() {
+            if (!scratchCleared) return;
+            const currentTime = new Date().getTime();
+            const tapLength = currentTime - lastTap;
+            if (tapLength < 300 && tapLength > 0) { triggerVideoSurprise(); }
+            lastTap = currentTime;
+        }
+
+        // Bring the running video to the front in perfect sync
+        function triggerVideoSurprise() {
+            if (!scratchCleared) return;
+            
+            // Add native video controls dynamically so they can pause/seek now
+            video.controls = true;
+            
+            // Bring invisible video layer to front smoothly
+            videoLayer.classList.add('video-active');
         }
     </script>
 </body>
